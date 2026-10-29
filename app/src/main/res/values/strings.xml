@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">ReelMeter</string>
+    <string name="accessibility_description">ReelMeter counts how many short videos you swipe through in Instagram, YouTube and Facebook so you can stay under your daily limit. It never reads, stores or shares what is on your screen.</string>
+</resources>

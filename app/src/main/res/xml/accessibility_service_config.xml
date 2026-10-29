@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Privacy by design:
+  - Only scroll events (typeViewScrolled) and window state changes (typeWindowStateChanged) are requested.
+  - canRetrieveWindowContent=false: the service can NOT read the screen content.
+  - Limited to the three tracked apps.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeViewScrolled|typeViewSelected|typeWindowStateChanged|typeWindowsChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault"
+    android:canRetrieveWindowContent="false"
+    android:notificationTimeout="50"
+    android:packageNames="com.instagram.android,com.google.android.youtube,com.facebook.katana,com.snapchat.android"
+    android:description="@string/accessibility_description" />
