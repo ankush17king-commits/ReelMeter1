@@ -61,4 +61,5 @@ data class SettingsEntity(
     val blackoutEndHour: Int = 7,
     val doomscrollAlertEnabled: Boolean = true,
     val doomscrollThreshold: Int = 15,
+    val limitLockedUntilEpochDay: Long = 0L,
 )

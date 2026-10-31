@@ -73,7 +73,8 @@ fun AppCard(
             containerColor = if (isDark)
                 MaterialTheme.colorScheme.surface.copy(alpha = 0.7f)
             else
-                MaterialTheme.colorScheme.surface
+                MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = if (isDark) 0.dp else 0.5.dp),
     ) {

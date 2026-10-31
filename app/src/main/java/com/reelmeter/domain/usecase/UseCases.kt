@@ -138,9 +138,24 @@ class ObserveAdvancedStatsUseCase @Inject constructor(
 ) {
     @OptIn(ExperimentalCoroutinesApi::class)
     operator fun invoke(period: com.reelmeter.domain.model.StatsPeriod): Flow<com.reelmeter.domain.model.AdvancedStatsData> = time.todayFlow().flatMapLatest { today ->
-        combine(reels.observeAll(), settings.settings) { all, s ->
+        combine(
+            reels.observeAll(),
+            reels.observeTodayEvents(today),
+            settings.settings
+        ) { all, todayEvents, s ->
             val daysCount = period.daysCount
             val byDay = all.associateBy { it.day }
+
+            // Today 24-hour breakdown
+            val hourMap = (0..23).associateWith { h ->
+                todayEvents.count { event ->
+                    val cal = java.util.Calendar.getInstance().apply { timeInMillis = event.timestamp }
+                    cal.get(java.util.Calendar.HOUR_OF_DAY) == h
+                }
+            }
+            val todayHourlyBars = (0..23).map { h ->
+                DayBar(today, hourMap[h] ?: 0, s.dailyLimit)
+            }
 
             // Current period bars
             val chartBars = ((daysCount - 1) downTo 0).map { offset ->
@@ -243,6 +258,7 @@ class ObserveAdvancedStatsUseCase @Inject constructor(
                 reelsAvoided = reelsAvoided,
                 estimatedTimeSavedMinutes = estimatedTimeSavedMinutes,
                 chartBars = chartBars,
+                todayHourlyBars = todayHourlyBars,
                 appAnalytics = appAnalytics,
                 mostUsedApp = mostUsedApp,
                 insights = insights,

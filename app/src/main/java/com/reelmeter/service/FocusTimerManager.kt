@@ -27,15 +27,18 @@ class FocusTimerManager @Inject constructor(
     val timerState: StateFlow<FocusTimerState> = _timerState.asStateFlow()
 
     init {
-        // Ticking loop to evaluate state transitions automatically
+        // Ticking loop to evaluate state transitions automatically & update UI timer digits
         scope.launch {
             while (true) {
                 delay(1000)
                 val current = _timerState.value
                 val now = timeProvider.nowMillis()
                 val evaluated = FocusTimerLogic.evaluate(current, now)
-                if (evaluated != current) {
-                    _timerState.value = evaluated
+                _timerState.value = evaluated
+                if (evaluated is FocusTimerState.Running) {
+                    _timerState.value = evaluated.copy()
+                } else if (evaluated is FocusTimerState.Unlocking) {
+                    _timerState.value = evaluated.copy()
                 }
             }
         }

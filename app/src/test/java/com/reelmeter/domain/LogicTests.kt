@@ -182,3 +182,14 @@ class BlackoutWindowTest {
         assertFalse(isInsideBlackoutWindow(13, 9, 13))
     }
 }
+
+class ReelTransitionDetectorTest {
+    private val detector = com.reelmeter.domain.logic.ReelTransitionDetector(1200L)
+
+    @Test fun `filters out comment list events`() {
+        assertFalse(detector.isReelContainerEvent("com.instagram.comments.CommentListView"))
+        assertFalse(detector.isReelContainerEvent("android.widget.EditText"))
+        assertFalse(detector.isReelContainerEvent("android.widget.Button"))
+        assertTrue(detector.isReelContainerEvent("androidx.viewpager2.widget.ViewPager2"))
+    }
+}

@@ -55,6 +55,7 @@ fun SettingsEntity.toDomain() = UserSettings(
     blackoutEndHour = blackoutEndHour,
     doomscrollAlertEnabled = doomscrollAlertEnabled,
     doomscrollThreshold = doomscrollThreshold,
+    limitLockedUntilEpochDay = limitLockedUntilEpochDay,
 )
 
 fun UserSettings.toEntity() = SettingsEntity(
@@ -91,4 +92,5 @@ fun UserSettings.toEntity() = SettingsEntity(
     blackoutEndHour = blackoutEndHour,
     doomscrollAlertEnabled = doomscrollAlertEnabled,
     doomscrollThreshold = doomscrollThreshold,
+    limitLockedUntilEpochDay = limitLockedUntilEpochDay,
 )

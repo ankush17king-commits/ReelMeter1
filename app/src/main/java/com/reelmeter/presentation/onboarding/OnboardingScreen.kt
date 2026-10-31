@@ -34,6 +34,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
@@ -74,7 +75,7 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun OnboardingScreen(onFinished: () -> Unit, viewModel: OnboardingViewModel = hiltViewModel()) {
-    val totalPages = 15
+    val totalPages = 17 // 10 survey/permission pages + 7 personalized reveal screens
     val pagerState = rememberPagerState { totalPages }
     val scope = rememberCoroutineScope()
     val permissions by viewModel.permissions.collectAsStateWithLifecycle()
@@ -98,18 +99,18 @@ fun OnboardingScreen(onFinished: () -> Unit, viewModel: OnboardingViewModel = hi
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refreshPermissions() }
 
     val page = pagerState.currentPage
-    val canContinue = page != 13 || understood // Page 13 is Privacy disclosure agreement
+    val canContinue = page != 9 || understood
 
     Column(Modifier.fillMaxSize().padding(20.dp)) {
         // Top Header Progress Bar
-        if (page in 1..13) {
+        if (page in 1..9) {
             Row(
                 Modifier.fillMaxWidth().padding(bottom = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "Question $page of 13",
+                    "Question $page of 9",
                     style = MaterialTheme.typography.labelMedium,
                     color = PremiumColors.GlowCyan,
                     fontWeight = FontWeight.Bold
@@ -118,6 +119,24 @@ fun OnboardingScreen(onFinished: () -> Unit, viewModel: OnboardingViewModel = hi
                     onClick = { scope.launch { pagerState.animateScrollToPage(page + 1) } }
                 ) {
                     Text("Skip", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        } else if (page in 10..16) {
+            Row(
+                Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Personalized Reveal ${page - 9} of 7",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = PremiumColors.GlowCyan,
+                    fontWeight = FontWeight.Bold
+                )
+                TextButton(
+                    onClick = { scope.launch { pagerState.animateScrollToPage(16) } }
+                ) {
+                    Text("Skip to Finish", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -140,27 +159,48 @@ fun OnboardingScreen(onFinished: () -> Unit, viewModel: OnboardingViewModel = hi
                     5 -> Q6ScrollTimesScreen(scrollTimes) { scrollTimes = it }
                     6 -> Q7AffectedAreasScreen(affectedAreas) { affectedAreas = it }
                     7 -> Q8SavedTimeActivitiesScreen(savedTimeActivities) { savedTimeActivities = it }
-                    8 -> Q9TargetSavedTimeScreen(targetTimeSaved) { targetTimeSaved = it }
-                    9 -> Q10LimitBehaviorsScreen(limitBehaviors) { limitBehaviors = it }
-                    10 -> Q11DailyLimitScreen(dailyLimitReels) { dailyLimitReels = it }
-                    11 -> Q12ResetTimeScreen(resetTime) { resetTime = it }
-                    12 -> Q13StrictnessScreen(strictnessMode) { strictnessMode = it }
-                    13 -> Q14CommitmentScreen(
+                    8 -> Q9DailyLimitAndStrictnessScreen(dailyLimitReels, { dailyLimitReels = it }, strictnessMode, { strictnessMode = it })
+                    9 -> Q10CommitmentAndPermissionsPage(
                         userName = userName,
                         onNameChange = { userName = it },
                         goals = selectedGoals,
                         limit = dailyLimitReels.toInt(),
                         mode = strictnessMode,
-                        onEdit = { scope.launch { pagerState.animateScrollToPage(1) } },
-                        onConfirm = { scope.launch { pagerState.animateScrollToPage(14) } }
+                        understood = understood,
+                        onUnderstoodChange = { understood = it },
+                        permissions = permissions
                     )
-                    14 -> Q15PermissionsPage(understood, { understood = it }, permissions)
+                    10 -> RevealScreen1Daily(estimatedUsage)
+                    11 -> RevealScreen2Weekly(estimatedUsage)
+                    12 -> RevealScreen3Monthly(estimatedUsage)
+                    13 -> RevealScreen4Yearly(estimatedUsage)
+                    14 -> RevealScreen5PeakHours(scrollTimes)
+                    15 -> RevealScreen6Alternatives(estimatedUsage, savedTimeActivities)
+                    16 -> RevealScreen7Motivational {
+                        viewModel.finishOnboarding(
+                            userName = userName,
+                            occupation = "User",
+                            selectedGoals = selectedGoals,
+                            selectedApps = selectedApps,
+                            estimatedDailyUsage = estimatedUsage,
+                            unplannedOpenFrequency = unplannedOpens,
+                            scrollTimesOfDay = scrollTimes,
+                            scrollAffectsAreas = affectedAreas,
+                            preferredSavedTimeActivities = savedTimeActivities,
+                            targetTimeSaved = targetTimeSaved,
+                            limitReachedBehavior = limitBehaviors,
+                            dailyLimit = dailyLimitReels.toInt(),
+                            resetTime = resetTime,
+                            strictnessMode = strictnessMode,
+                            onDone = onFinished
+                        )
+                    }
                 }
             }
         }
 
         // Navigation Footer Controls
-        if (page in 1..12 || page == 14) {
+        if (page in 1..8 || page in 9..15) {
             Row(
                 Modifier.fillMaxWidth().padding(top = 12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -172,7 +212,7 @@ fun OnboardingScreen(onFinished: () -> Unit, viewModel: OnboardingViewModel = hi
                     Text("Back", fontWeight = FontWeight.Medium)
                 }
 
-                if (page < 14) {
+                if (page < 9) {
                     Button(
                         enabled = canContinue,
                         onClick = { scope.launch { pagerState.animateScrollToPage(page + 1) } },
@@ -184,38 +224,27 @@ fun OnboardingScreen(onFinished: () -> Unit, viewModel: OnboardingViewModel = hi
                     ) {
                         Text("Continue", color = Color.White, fontWeight = FontWeight.Bold)
                     }
-                } else {
+                } else if (page == 9) {
                     Button(
-                        onClick = {
-                            viewModel.finishOnboarding(
-                                userName = userName,
-                                occupation = "User",
-                                selectedGoals = selectedGoals,
-                                selectedApps = selectedApps,
-                                estimatedDailyUsage = estimatedUsage,
-                                unplannedOpenFrequency = unplannedOpens,
-                                scrollTimesOfDay = scrollTimes,
-                                scrollAffectsAreas = affectedAreas,
-                                preferredSavedTimeActivities = savedTimeActivities,
-                                targetTimeSaved = targetTimeSaved,
-                                limitReachedBehavior = limitBehaviors,
-                                dailyLimit = dailyLimitReels.toInt(),
-                                resetTime = resetTime,
-                                strictnessMode = strictnessMode,
-                                onDone = onFinished
-                            )
-                        },
+                        onClick = { scope.launch { pagerState.animateScrollToPage(10) } },
                         colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
                         contentPadding = ButtonDefaults.ContentPadding,
                         modifier = Modifier
                             .clip(RoundedCornerShape(20.dp))
                             .background(Brush.horizontalGradient(listOf(PremiumColors.GlowCyan, PremiumColors.GlowPurple)))
                     ) {
-                        Text(
-                            if (permissions.allGranted) "Start My Journey" else "Continue Anyway",
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Text("See My Report 🚀", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    Button(
+                        onClick = { scope.launch { pagerState.animateScrollToPage(page + 1) } },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                        contentPadding = ButtonDefaults.ContentPadding,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(Brush.horizontalGradient(listOf(PremiumColors.GlowCyan, PremiumColors.GlowPurple)))
+                    ) {
+                        Text("Next ➔", color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -280,7 +309,7 @@ private fun Q1WelcomeScreen(onNext: () -> Unit) {
 private fun Q2GoalsScreen(selected: Set<String>, onChange: (Set<String>) -> Unit) {
     MascotComponent("Selecting goals helps me tailor recommendations for you!")
     Spacer(Modifier.height(12.dp))
-    Text("What do you want to achieve?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+    Text("What do you want to achieve?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
     Text("Select all that apply", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Spacer(Modifier.height(16.dp))
 
@@ -307,7 +336,7 @@ private fun Q2GoalsScreen(selected: Set<String>, onChange: (Set<String>) -> Unit
 private fun Q3AppsScreen(selected: Set<TrackedApp>, onChange: (Set<TrackedApp>) -> Unit) {
     MascotComponent("Which apps consume most of your time?")
     Spacer(Modifier.height(12.dp))
-    Text("Select your primary apps", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+    Text("Select your primary apps", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
     Spacer(Modifier.height(16.dp))
 
     TrackedApp.entries.forEach { app ->
@@ -323,7 +352,7 @@ private fun Q3AppsScreen(selected: Set<TrackedApp>, onChange: (Set<TrackedApp>) 
 private fun Q4DailyUsageScreen(selected: String, onChange: (String) -> Unit) {
     MascotComponent("Be honest! No judgment here.")
     Spacer(Modifier.height(12.dp))
-    Text("How much time do you spend on short-form content daily?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+    Text("How much time do you spend on short-form content daily?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
     Spacer(Modifier.height(16.dp))
 
     val options = listOf(
@@ -346,7 +375,7 @@ private fun Q4DailyUsageScreen(selected: String, onChange: (String) -> Unit) {
 private fun Q5UnplannedOpensScreen(selected: String, onChange: (String) -> Unit) {
     MascotComponent("Many of us open social media automatically!")
     Spacer(Modifier.height(12.dp))
-    Text("How often do you open these apps without planning to?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+    Text("How often do you open these apps without planning to?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
     Spacer(Modifier.height(16.dp))
 
     val options = listOf(
@@ -367,7 +396,7 @@ private fun Q5UnplannedOpensScreen(selected: String, onChange: (String) -> Unit)
 private fun Q6ScrollTimesScreen(selected: Set<String>, onChange: (Set<String>) -> Unit) {
     MascotComponent("Identifying triggers is step #1.")
     Spacer(Modifier.height(12.dp))
-    Text("When do you scroll the most?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+    Text("When do you scroll the most?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
     Spacer(Modifier.height(16.dp))
 
     val options = listOf(
@@ -393,7 +422,7 @@ private fun Q6ScrollTimesScreen(selected: Set<String>, onChange: (Set<String>) -
 private fun Q7AffectedAreasScreen(selected: Set<String>, onChange: (Set<String>) -> Unit) {
     MascotComponent("We'll protect what matters to you.")
     Spacer(Modifier.height(12.dp))
-    Text("What does scrolling usually affect?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+    Text("What does scrolling usually affect?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
     Spacer(Modifier.height(16.dp))
 
     val options = listOf(
@@ -419,7 +448,7 @@ private fun Q7AffectedAreasScreen(selected: Set<String>, onChange: (Set<String>)
 private fun Q8SavedTimeActivitiesScreen(selected: Set<String>, onChange: (Set<String>) -> Unit) {
     MascotComponent("Imagine what you can accomplish!")
     Spacer(Modifier.height(12.dp))
-    Text("What would you rather do with the time you save?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+    Text("What would you rather do with the time you save?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
     Spacer(Modifier.height(16.dp))
 
     val options = listOf(
@@ -441,59 +470,25 @@ private fun Q8SavedTimeActivitiesScreen(selected: Set<String>, onChange: (Set<St
     }
 }
 
-// Q9 How much time saved
+// Q9 Daily Limit & Strictness Combined
 @Composable
-private fun Q9TargetSavedTimeScreen(selected: String, onChange: (String) -> Unit) {
-    MascotComponent("Set a personal target.")
+private fun Q9DailyLimitAndStrictnessScreen(
+    selectedLimit: Float,
+    onLimitChange: (Float) -> Unit,
+    selectedMode: String,
+    onModeChange: (String) -> Unit
+) {
+    MascotComponent("Set your daily target & strictness guidance.")
     Spacer(Modifier.height(12.dp))
-    Text("How much time would you like to save daily?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-    Spacer(Modifier.height(16.dp))
-
-    val options = listOf("15 minutes", "30 minutes", "1 hour", "2 hours", "More than 2 hours")
-
-    options.forEach { item ->
-        OptionCard(text = item, selected = selected == item) { onChange(item) }
-    }
-}
-
-// Q10 Limit behavior
-@Composable
-private fun Q10LimitBehaviorsScreen(selected: Set<String>, onChange: (Set<String>) -> Unit) {
-    MascotComponent("You choose how strict I am.")
-    Spacer(Modifier.height(12.dp))
-    Text("What should Reel Meter do when you reach your limit?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-    Spacer(Modifier.height(16.dp))
-
-    val options = listOf(
-        "Give me a gentle reminder",
-        "Show the robot and ask me to reconsider",
-        "Lock supported apps temporarily",
-        "Give me a short break, then let me continue"
-    )
-
-    options.forEach { item ->
-        val isSelected = item in selected
-        OptionCard(text = item, selected = isSelected) {
-            onChange(if (isSelected) selected - item else selected + item)
-        }
-    }
-}
-
-// Q11 Set daily limit
-@Composable
-private fun Q11DailyLimitScreen(selectedLimit: Float, onChange: (Float) -> Unit) {
-    MascotComponent("Let's set a realistic target!")
-    Spacer(Modifier.height(12.dp))
-    Text("Set your daily limit", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-    Text("Start achievable and adjust anytime in Settings.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    Spacer(Modifier.height(24.dp))
+    Text("Set your daily limit", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+    Spacer(Modifier.height(8.dp))
 
     Text("${selectedLimit.toInt()} reels daily", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = PremiumColors.GlowCyan)
-    Spacer(Modifier.height(12.dp))
+    Spacer(Modifier.height(8.dp))
 
     Slider(
         value = selectedLimit,
-        onValueChange = onChange,
+        onValueChange = onLimitChange,
         valueRange = 10f..300f,
         steps = 28,
         colors = SliderDefaults.colors(
@@ -503,91 +498,40 @@ private fun Q11DailyLimitScreen(selectedLimit: Float, onChange: (Float) -> Unit)
     )
 
     Spacer(Modifier.height(16.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        listOf(30f, 50f, 100f, 150f).forEach { preset ->
-            OutlinedButton(
-                onClick = { onChange(preset) },
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("${preset.toInt()}")
-            }
-        }
-    }
-}
+    Text("Select guidance mode:", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+    Spacer(Modifier.height(8.dp))
 
-// Q12 Reset time
-@Composable
-private fun Q12ResetTimeScreen(selected: String, onChange: (String) -> Unit) {
-    MascotComponent("When should your limits reset?")
-    Spacer(Modifier.height(12.dp))
-    Text("Select reset time", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-    Spacer(Modifier.height(16.dp))
-
-    val options = listOf("Midnight every day", "A custom reset time")
-
-    options.forEach { item ->
-        OptionCard(text = item, selected = selected == item) { onChange(item) }
-    }
-}
-
-// Q13 Strictness level
-@Composable
-private fun Q13StrictnessScreen(selected: String, onChange: (String) -> Unit) {
-    MascotComponent("Choose your level of guidance.")
-    Spacer(Modifier.height(12.dp))
-    Text("Choose your strictness level", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-    Spacer(Modifier.height(16.dp))
-
-    val options = listOf(
-        "Gentle Mode" to "Friendly reminders and usage notifications.",
+    val modes = listOf(
         "Balanced Mode" to "Reminders at 75% and temporary intervention at 100%.",
         "Focus Mode" to "Stronger app blocking and strict breathing countdowns."
     )
 
-    options.forEach { (title, desc) ->
-        val isSelected = selected == title.split(" ").first() || selected == title
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .then(
-                    if (isSelected) {
-                        Modifier.border(
-                            2.dp,
-                            Brush.linearGradient(listOf(PremiumColors.GlowCyan, PremiumColors.GlowPurple)),
-                            RoundedCornerShape(20.dp)
-                        )
-                    } else Modifier
-                )
-                .clickable { onChange(title.split(" ").first()) }
-        ) {
-            AppCard {
-                Column {
-                    Text(title, fontWeight = FontWeight.Bold, color = if (isSelected) PremiumColors.GlowCyan else MaterialTheme.colorScheme.onSurface)
-                    Spacer(Modifier.height(4.dp))
-                    Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
+    modes.forEach { (title, desc) ->
+        val isSelected = selectedMode == title.split(" ").first() || selectedMode == title
+        OptionCard(text = "$title - $desc", selected = isSelected) {
+            onModeChange(title.split(" ").first())
         }
     }
 }
 
-// Q14 Personal Commitment
+// Q10 Personal Commitment & Permissions Combined
 @Composable
-private fun Q14CommitmentScreen(
+private fun Q10CommitmentAndPermissionsPage(
     userName: String,
     onNameChange: (String) -> Unit,
     goals: Set<String>,
     limit: Int,
     mode: String,
-    onEdit: () -> Unit,
-    onConfirm: () -> Unit
+    understood: Boolean,
+    onUnderstoodChange: (Boolean) -> Unit,
+    permissions: com.reelmeter.core.PermissionStatus
 ) {
-    MascotComponent("You're in control. I'll help you notice your habits, protect your time, and make progress one day at a time. Ready to start?")
+    val actions = rememberPermissionActions()
+
+    MascotComponent("Confirm your setup & enable required permissions.")
     Spacer(Modifier.height(12.dp))
-    Text("Your Personal Commitment", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-    Spacer(Modifier.height(16.dp))
+    Text("Setup & Permissions", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+    Spacer(Modifier.height(12.dp))
 
     AppCard {
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -596,43 +540,37 @@ private fun Q14CommitmentScreen(
                 onValueChange = onNameChange,
                 label = { Text("Your Name") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface
+                )
             )
-            Spacer(Modifier.height(4.dp))
             Text("Daily Limit: $limit reels", fontWeight = FontWeight.Bold, color = PremiumColors.GlowCyan)
-            Text("Strictness: $mode", fontWeight = FontWeight.Medium)
-            if (goals.isNotEmpty()) {
-                Text("Focus Goals: " + goals.take(2).joinToString(", "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+            Text("Mode: $mode", fontWeight = FontWeight.Medium)
         }
     }
 
-    Spacer(Modifier.height(24.dp))
-    PremiumButton(text = "Start My Journey", onClick = onConfirm)
-    Spacer(Modifier.height(8.dp))
-    TextButton(onClick = onEdit, modifier = Modifier.fillMaxWidth()) {
-        Text("Edit My Plan")
-    }
-}
-
-// Q15 Permissions
-@Composable
-private fun Q15PermissionsPage(
-    understood: Boolean,
-    onUnderstoodChange: (Boolean) -> Unit,
-    permissions: com.reelmeter.core.PermissionStatus
-) {
-    val context = LocalContext.current
-    val actions = rememberPermissionActions()
-
-    MascotComponent("Enable required permissions to allow counting and interventions.")
     Spacer(Modifier.height(12.dp))
-    Text("Permissions Setup", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-    Spacer(Modifier.height(12.dp))
-
-    PermissionRow("1. Accessibility Service", "Counts swipes in Instagram, YouTube, Facebook & Snapchat.", permissions.accessibility, actions.fixAccessibility)
+    PermissionRow("1. Accessibility Service", "Counts swipes in Instagram, Shorts, FB & Snapchat.", permissions.accessibility, actions.fixAccessibility)
     PermissionRow("2. Display over other apps", "Shows break overlay when limit is reached.", permissions.overlay, actions.fixOverlay)
-    PermissionRow("3. Notifications", "Sends limit warnings.", permissions.notifications, actions.fixNotifications)
+
+    Spacer(Modifier.height(12.dp))
+    // Google Play Protect Sideload Explanation Card
+    AppCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.Shield, null, tint = PremiumColors.GlowAmber, modifier = Modifier.size(28.dp))
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text("Google Play Protect Notice", fontWeight = FontWeight.Bold, color = PremiumColors.GlowAmber)
+                Text(
+                    "ReelMeter is sideloaded directly via APK and is 100% safe. If Play Protect shows an unverified developer prompt, simply tap 'More details → Install anyway'.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
 
     Spacer(Modifier.height(12.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {

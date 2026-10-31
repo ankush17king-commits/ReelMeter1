@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface ReelEventDao {
     @Insert suspend fun insert(event: ReelEventEntity)
+    @Query("SELECT * FROM reel_events WHERE dayKey = :dayKey") fun observeTodayEvents(dayKey: String): Flow<List<ReelEventEntity>>
     @Query("DELETE FROM reel_events WHERE timestamp < :before") suspend fun deleteBefore(before: Long)
     @Query("DELETE FROM reel_events") suspend fun deleteAll()
 }

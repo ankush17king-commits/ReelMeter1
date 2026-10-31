@@ -54,6 +54,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -146,48 +147,58 @@ private fun StatsContent(data: AdvancedStatsData, onSelectPeriod: (StatsPeriod) 
             // Overview Summary Cards
             OverviewSection(data)
 
-            // Interactive Usage Chart with Tap Inspection
+            // Interactive Usage Chart with Tap Inspection / Hour-wise / Line Graph
             PremiumSectionTitle("${data.selectedPeriod.label} Usage Chart")
             AppCard {
-                if (data.chartBars.any { it.total > 0 }) {
-                    InteractiveChart(data.chartBars, data.dailyLimit, selectedBar) { selectedBar = it }
-                    
-                    AnimatedVisibility(selectedBar != null) {
-                        selectedBar?.let { bar ->
-                            Spacer(Modifier.height(12.dp))
-                            Box(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(PremiumColors.GlowCyan.copy(alpha = 0.08f))
-                                    .border(1.dp, PremiumColors.GlowCyan.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
-                                    .padding(12.dp)
-                            ) {
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                    Column {
-                                        Text(
-                                            bar.day.format(DateTimeFormatter.ofPattern("EEEE, d MMMM")),
-                                            fontWeight = FontWeight.Bold,
-                                            style = MaterialTheme.typography.bodyMedium
-                                        )
-                                        Text(
-                                            if (bar.total >= bar.limit) "Over limit by ${bar.total - bar.limit}" else "Under limit of ${bar.limit}",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = if (bar.total >= bar.limit) PremiumColors.GlowRed else PremiumColors.GlowMint
-                                        )
+                when (data.selectedPeriod) {
+                    StatsPeriod.TODAY -> {
+                        TodayHourlyChart(data.todayHourlyBars)
+                    }
+                    StatsPeriod.THIRTY_DAYS -> {
+                        ThirtyDayLineChart(data.chartBars, data.dailyLimit)
+                    }
+                    StatsPeriod.SEVEN_DAYS -> {
+                        if (data.chartBars.any { it.total > 0 }) {
+                            InteractiveChart(data.chartBars, data.dailyLimit, selectedBar) { selectedBar = it }
+                            
+                            AnimatedVisibility(selectedBar != null) {
+                                selectedBar?.let { bar ->
+                                    Spacer(Modifier.height(12.dp))
+                                    Box(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(PremiumColors.GlowCyan.copy(alpha = 0.08f))
+                                            .border(1.dp, PremiumColors.GlowCyan.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                                            .padding(12.dp)
+                                    ) {
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                            Column {
+                                                Text(
+                                                    bar.day.format(DateTimeFormatter.ofPattern("EEEE, d MMMM")),
+                                                    fontWeight = FontWeight.Bold,
+                                                    style = MaterialTheme.typography.bodyMedium
+                                                )
+                                                Text(
+                                                    if (bar.total >= bar.limit) "Over limit by ${bar.total - bar.limit}" else "Under limit of ${bar.limit}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = if (bar.total >= bar.limit) PremiumColors.GlowRed else PremiumColors.GlowMint
+                                                )
+                                            }
+                                            Text(
+                                                "${bar.total} reels",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = PremiumColors.GlowCyan
+                                            )
+                                        }
                                     }
-                                    Text(
-                                        "${bar.total} reels",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = PremiumColors.GlowCyan
-                                    )
                                 }
                             }
+                        } else {
+                            EmptyState(Icons.Rounded.BarChart, "No usage recorded", "Your reel counts for ${data.selectedPeriod.label.lowercase()} will appear here.")
                         }
                     }
-                } else {
-                    EmptyState(Icons.Rounded.BarChart, "No usage recorded", "Your reel counts for ${data.selectedPeriod.label.lowercase()} will appear here.")
                 }
             }
 
@@ -570,6 +581,148 @@ private fun AppUsagePieChart(appAnalytics: List<com.reelmeter.domain.model.AppAn
             }
         } else {
             Text("No app usage recorded for pie chart display.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun TodayHourlyChart(bars: List<DayBar>) {
+    val maxBar = (bars.maxOfOrNull { it.total } ?: 1).coerceAtLeast(1)
+
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(140.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.Bottom
+        ) {
+            bars.forEachIndexed { hourIndex, bar ->
+                val heightFraction = bar.total.toFloat() / maxBar
+                val barColor = PremiumColors.GlowCyan
+
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    if (bar.total > 0) {
+                        Text(
+                            "${bar.total}",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                            fontWeight = FontWeight.Bold,
+                            color = PremiumColors.GlowCyan
+                        )
+                    }
+                    Box(
+                        Modifier
+                            .width(6.dp)
+                            .height((100 * heightFraction).dp.coerceAtLeast(4.dp))
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(
+                                if (bar.total > 0) Brush.verticalGradient(listOf(barColor, PremiumColors.GlowPurple))
+                                else Brush.verticalGradient(listOf(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.surfaceVariant))
+                            )
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("00:00", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("06:00", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("12:00", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("18:00", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("23:00", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun ThirtyDayLineChart(
+    bars: List<DayBar>,
+    limit: Int
+) {
+    val maxBar = (bars.maxOfOrNull { it.total } ?: 1).coerceAtLeast(limit).coerceAtLeast(1)
+
+    Column(Modifier.fillMaxWidth()) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(160.dp)
+                .padding(vertical = 8.dp)
+        ) {
+            androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                val width = size.width
+                val height = size.height
+                val stepX = width / (bars.size - 1).coerceAtLeast(1)
+
+                val points = bars.mapIndexed { index, bar ->
+                    val x = index * stepX
+                    val y = height - (bar.total.toFloat() / maxBar) * height
+                    androidx.compose.ui.geometry.Offset(x, y)
+                }
+
+                // Draw limit line
+                val limitY = height - (limit.toFloat() / maxBar) * height
+                drawLine(
+                    color = PremiumColors.GlowRed.copy(alpha = 0.5f),
+                    start = androidx.compose.ui.geometry.Offset(0f, limitY),
+                    end = androidx.compose.ui.geometry.Offset(width, limitY),
+                    strokeWidth = 2f,
+                    pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f))
+                )
+
+                // Build Line Path & Area Gradient
+                if (points.isNotEmpty()) {
+                    val linePath = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(points.first().x, points.first().y)
+                        for (i in 1 until points.size) {
+                            lineTo(points[i].x, points[i].y)
+                        }
+                    }
+
+                    val fillPath = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(points.first().x, height)
+                        for (p in points) {
+                            lineTo(p.x, p.y)
+                        }
+                        lineTo(points.last().x, height)
+                        close()
+                    }
+
+                    // Fill gradient
+                    drawPath(
+                        path = fillPath,
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                PremiumColors.GlowCyan.copy(alpha = 0.35f),
+                                Color.Transparent
+                            )
+                        )
+                    )
+
+                    // Draw Stroke Line
+                    drawPath(
+                        path = linePath,
+                        color = PremiumColors.GlowCyan,
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 4f)
+                    )
+
+                    // Draw data point dots
+                    points.forEach { point ->
+                        drawCircle(
+                            color = PremiumColors.GlowCyan,
+                            radius = 6f,
+                            center = point
+                        )
+                    }
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(bars.firstOrNull()?.day?.format(DateTimeFormatter.ofPattern("d MMM")) ?: "", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("30-Day Trend Line", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = PremiumColors.GlowCyan)
+            Text(bars.lastOrNull()?.day?.format(DateTimeFormatter.ofPattern("d MMM")) ?: "", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

@@ -159,7 +159,13 @@ class OverlayController(private val context: Context) {
     fun dismiss() {
         timer?.cancel(); timer = null
         breathing?.cancel(); breathing = null
-        root?.let { runCatching { windowManager.removeView(it) } }
+        val viewToDismiss = root
         root = null
+        if (viewToDismiss != null) {
+            val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+            mainHandler.post {
+                runCatching { windowManager.removeView(viewToDismiss) }
+            }
+        }
     }
 }

@@ -56,6 +56,7 @@ data class UserSettings(
     val blackoutEndHour: Int = 7,   // 7 AM
     val doomscrollAlertEnabled: Boolean = true,
     val doomscrollThreshold: Int = 15,
+    val limitLockedUntilEpochDay: Long = 0L,
 )
 
 data class DayStat(
@@ -132,6 +133,7 @@ data class AdvancedStatsData(
     val reelsAvoided: Int = 0,
     val estimatedTimeSavedMinutes: Long = 0,
     val chartBars: List<DayBar> = emptyList(),
+    val todayHourlyBars: List<DayBar> = emptyList(),
     val appAnalytics: List<AppAnalyticsSummary> = emptyList(),
     val mostUsedApp: TrackedApp? = null,
     val insights: List<String> = emptyList(),

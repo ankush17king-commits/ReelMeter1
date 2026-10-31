@@ -10,6 +10,7 @@ interface ReelRepository {
     /** Stores one reel event (app + timestamp only) and increments the day's counter atomically. */
     suspend fun recordReel(app: TrackedApp, timestamp: Long, day: LocalDate, limit: Int): DayStat
     fun observeDay(day: LocalDate): Flow<DayStat?>
+    fun observeTodayEvents(day: LocalDate): Flow<List<com.reelmeter.data.local.ReelEventEntity>>
     fun observeRange(from: LocalDate, to: LocalDate): Flow<List<DayStat>>
     fun observeAll(): Flow<List<DayStat>>
     suspend fun markWarned(day: LocalDate)

@@ -41,6 +41,8 @@ class ReelRepositoryImpl @Inject constructor(
 
     override fun observeDay(day: LocalDate): Flow<DayStat?> = daily.observe(day.toString()).map { it?.toDomain() }
 
+    override fun observeTodayEvents(day: LocalDate): Flow<List<ReelEventEntity>> = events.observeTodayEvents(day.toString())
+
     override fun observeRange(from: LocalDate, to: LocalDate): Flow<List<DayStat>> =
         daily.observeRange(from.toString(), to.toString()).map { list -> list.map { it.toDomain() } }
 

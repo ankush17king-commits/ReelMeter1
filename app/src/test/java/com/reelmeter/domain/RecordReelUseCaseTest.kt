@@ -46,6 +46,7 @@ private class FakeReels : ReelRepository {
         return updated
     }
     override fun observeDay(day: LocalDate) = flowOf(stats[day])
+    override fun observeTodayEvents(day: LocalDate) = flowOf(emptyList<com.reelmeter.data.local.ReelEventEntity>())
     override fun observeRange(from: LocalDate, to: LocalDate) = flowOf(stats.values.toList())
     override fun observeAll() = flowOf(stats.values.toList())
     override suspend fun markWarned(day: LocalDate) { stats[day] = stats.getValue(day).copy(warned = true) }

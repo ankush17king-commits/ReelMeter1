@@ -40,7 +40,8 @@ class ReelAccessibilityService : AccessibilityService() {
     @Inject lateinit var focusTimerManager: FocusTimerManager
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val debouncer = ReelDebouncer()
+    private val transitionDetector = com.reelmeter.domain.logic.ReelTransitionDetector()
+    private val lastKnownTotalMap = HashMap<java.time.LocalDate, Int>()
     private lateinit var overlay: OverlayController
     private lateinit var floatingCounter: FloatingCounterController
     private var activeTrackedApp: TrackedApp? = null
@@ -68,11 +69,30 @@ class ReelAccessibilityService : AccessibilityService() {
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
             event.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED
         ) {
+            // Ignore transient system overlays (volume bar, systemui, toasts, keyboard) to prevent flickering
+            if (packageName == "android" || packageName == "com.android.systemui" || packageName.contains("inputmethod")) {
+                return
+            }
+
+            val previousApp = activeTrackedApp
             val app = TrackedApp.fromPackage(packageName)
-            activeTrackedApp = app
+
             if (app != null) {
-                scope.launch { updateFloatingCounterState() }
-            } else {
+                activeTrackedApp = app
+                if (previousApp != app) {
+                    android.util.Log.d("ReelMeter", "[ReelMeter] ${app.label} opened")
+                    scope.launch { updateFloatingCounterState() }
+                } else if (!floatingCounter.isShowing) {
+                    scope.launch { updateFloatingCounterState() }
+                }
+            } else if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+                activeTrackedApp = null
+                if (previousApp != null) {
+                    android.util.Log.d("ReelMeter", "[ReelMeter] ${previousApp.label} closed")
+                    android.util.Log.d("ReelMeter", "[ReelMeter] Reel tracking paused")
+                    android.util.Log.d("ReelMeter", "[ReelMeter] Session saved")
+                    transitionDetector.resetApp(previousApp)
+                }
                 floatingCounter.dismiss()
             }
             return
@@ -93,7 +113,7 @@ class ReelAccessibilityService : AccessibilityService() {
             dx = 0; dy = 0
         }
         if (event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED && !SwipeFilter.isVerticalSwipe(dx, dy)) return
-        if (!debouncer.onScrollEvent(app, time.nowMillis())) return
+        if (!transitionDetector.isNewReelTransition(app, event, time.nowMillis())) return
 
         scope.launch { handleCounted(app) }
     }
@@ -144,10 +164,14 @@ class ReelAccessibilityService : AccessibilityService() {
 
         val today = time.today()
         val stat = reelRepository.observeDay(today).firstOrNull()
-        val total = stat?.total ?: 0
+        val dbTotal = stat?.total ?: 0
+        val inMemTotal = lastKnownTotalMap[today] ?: 0
+        val total = maxOf(dbTotal, inMemTotal)
         val limit = settings.dailyLimit
+        val snoozeUntil = stat?.snoozeUntil ?: 0L
+        val now = time.nowMillis()
 
-        if (total >= limit && activeTrackedApp != null) {
+        if (total >= limit && now >= snoozeUntil && activeTrackedApp != null) {
             kotlinx.coroutines.withContext(Dispatchers.Main) {
                 floatingCounter.dismiss()
                 showOverlay(
@@ -176,6 +200,13 @@ class ReelAccessibilityService : AccessibilityService() {
 
     private suspend fun handleCounted(app: TrackedApp) {
         val result = runCatching { recordReel(app) }.getOrNull() ?: return
+        val today = time.today()
+        val currentMax = lastKnownTotalMap[today] ?: 0
+        val effectiveTotal = maxOf(result.total, currentMax)
+        lastKnownTotalMap[today] = effectiveTotal
+
+        android.util.Log.d("ReelMeter", "[ReelMeter] Counter persisted: $effectiveTotal")
+        android.util.Log.d("ReelMeter", "[ReelMeter] UI updated: $effectiveTotal")
 
         val now = time.nowMillis()
         if (now - lastSwipeTimestamp > 5 * 60 * 1000L) {
