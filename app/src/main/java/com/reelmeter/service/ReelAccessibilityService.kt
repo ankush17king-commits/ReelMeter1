@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.os.Build
 import android.view.accessibility.AccessibilityEvent
 import com.reelmeter.core.TimeProvider
+import kotlin.math.abs
 import com.reelmeter.domain.logic.ReelDebouncer
 import com.reelmeter.domain.logic.SwipeFilter
 import com.reelmeter.domain.model.LimitAction
@@ -48,6 +49,14 @@ class ReelAccessibilityService : AccessibilityService() {
     private var sessionReelCount: Int = 0
     private var lastSwipeTimestamp: Long = 0L
 
+    // Debounce handler: prevents transient window events from flickering the counter
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val dismissCounterRunnable = Runnable {
+        if (activeTrackedApp == null) {
+            floatingCounter.dismiss()
+        }
+    }
+
     fun isInsideBlackoutWindow(nowHour: Int, startHour: Int, endHour: Int): Boolean {
         return if (startHour > endHour) {
             nowHour >= startHour || nowHour < endHour
@@ -78,14 +87,25 @@ class ReelAccessibilityService : AccessibilityService() {
             val app = TrackedApp.fromPackage(packageName)
 
             if (app != null) {
+                // Cancel any pending dismiss — user is still inside a tracked app
+                mainHandler.removeCallbacks(dismissCounterRunnable)
                 activeTrackedApp = app
+
                 if (previousApp != app) {
                     android.util.Log.d("ReelMeter", "[ReelMeter] ${app.label} opened")
+                    transitionDetector.onAppOpened(app)
                     scope.launch { updateFloatingCounterState() }
-                } else if (!floatingCounter.isShowing) {
-                    scope.launch { updateFloatingCounterState() }
+                } else {
+                    transitionDetector.onNavigationEvent(app)
+                    if (!floatingCounter.isShowing) {
+                        scope.launch { updateFloatingCounterState() }
+                    }
                 }
             } else if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+                // Only act on definitive foreground-app transitions (not transient window changes).
+                // Schedule the dismiss with a short delay so that brief system overlays (e.g.
+                // share sheets, permission dialogs) that immediately return focus to Instagram
+                // don't cause the counter to flash off and back on.
                 activeTrackedApp = null
                 if (previousApp != null) {
                     android.util.Log.d("ReelMeter", "[ReelMeter] ${previousApp.label} closed")
@@ -93,26 +113,44 @@ class ReelAccessibilityService : AccessibilityService() {
                     android.util.Log.d("ReelMeter", "[ReelMeter] Session saved")
                     transitionDetector.resetApp(previousApp)
                 }
-                floatingCounter.dismiss()
+                // Debounce: wait 800 ms before dismissing; if a tracked-app event arrives
+                // in that window the runnable is cancelled and the counter stays visible.
+                mainHandler.removeCallbacks(dismissCounterRunnable)
+                mainHandler.postDelayed(dismissCounterRunnable, 800L)
             }
+            // TYPE_WINDOWS_CHANGED for non-tracked packages is intentionally ignored here —
+            // those events fire for every floating window/toast/notification and are too noisy
+            // to use for counter visibility decisions.
             return
         }
 
+        // ── Scroll / Selected events (reel counting) ───────────────────────────
         if (event.eventType != AccessibilityEvent.TYPE_VIEW_SCROLLED &&
             event.eventType != AccessibilityEvent.TYPE_VIEW_SELECTED
         ) return
         if (!::overlay.isInitialized || overlay.isShowing) return
         val app = TrackedApp.fromPackage(packageName) ?: return
-        activeTrackedApp = app // Keep activeTrackedApp current on all reel events
 
-        val dx: Int
-        val dy: Int
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            dx = event.scrollDeltaX; dy = event.scrollDeltaY
-        } else {
-            dx = 0; dy = 0
+        // Cancel any pending dismiss — a scroll means the user is actively inside the app
+        mainHandler.removeCallbacks(dismissCounterRunnable)
+        activeTrackedApp = app
+
+        // Ensure floating counter is active when user is in a tracked app
+        if (!floatingCounter.isShowing) {
+            scope.launch { updateFloatingCounterState() }
         }
-        if (event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED && !SwipeFilter.isVerticalSwipe(dx, dy)) return
+
+        // Pre-filter: horizontal-only scrolls never count (story trays, carousels)
+        if (event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val dx = event.scrollDeltaX
+            val dy = event.scrollDeltaY
+            // For YouTube Shorts, ViewPager2 consumes vertical scroll and may report dy=0 with small touch drift dx.
+            // Do NOT discard YouTube Shorts scrolls unless dx is a massive horizontal swipe (e.g. > 180px)
+            if (app != TrackedApp.YOUTUBE && !SwipeFilter.isVerticalSwipe(dx, dy)) return
+            if (app == TrackedApp.YOUTUBE && abs(dx) > 180 && dy == 0) return
+        }
+
         if (!transitionDetector.isNewReelTransition(app, event, time.nowMillis())) return
 
         scope.launch { handleCounted(app) }
@@ -222,7 +260,9 @@ class ReelAccessibilityService : AccessibilityService() {
         val settings = settingsRepository.current()
 
         if (settings.doomscrollAlertEnabled && sessionReelCount >= settings.doomscrollThreshold) {
-            kotlinx.coroutines.withContext(Dispatchers.Main) {
+            // Post the toast via the main handler without going through withContext — avoids
+            // creating a temporary window context switch that can race with our counter state.
+            mainHandler.post {
                 android.widget.Toast.makeText(
                     this@ReelAccessibilityService,
                     "👁️ Eye Rest Warning: $sessionReelCount reels in a row! Time for a short break.",
@@ -232,10 +272,10 @@ class ReelAccessibilityService : AccessibilityService() {
         }
 
         kotlinx.coroutines.withContext(Dispatchers.Main) {
-            if (settings.showFloatingCounter && activeTrackedApp == app) {
+            if (settings.showFloatingCounter && activeTrackedApp != null) {
+                // Show/update with effective total — don't dismiss just because activeTrackedApp
+                // temporarily changed app reference mid-dispatch (race condition guard).
                 floatingCounter.showOrUpdate(result.total, result.limit)
-            } else {
-                floatingCounter.dismiss()
             }
 
             when (result.action) {
@@ -267,6 +307,7 @@ class ReelAccessibilityService : AccessibilityService() {
     override fun onInterrupt() = Unit
 
     override fun onDestroy() {
+        mainHandler.removeCallbacks(dismissCounterRunnable)
         if (::overlay.isInitialized) overlay.dismiss()
         if (::floatingCounter.isInitialized) floatingCounter.dismiss()
         scope.cancel()
