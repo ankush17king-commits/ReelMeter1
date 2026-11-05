@@ -51,9 +51,18 @@ class ReelAccessibilityService : AccessibilityService() {
 
     // Debounce handler: prevents transient window events from flickering the counter
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var pendingAppToClose: TrackedApp? = null
     private val dismissCounterRunnable = Runnable {
         if (activeTrackedApp == null) {
             floatingCounter.dismiss()
+            val closedApp = pendingAppToClose
+            pendingAppToClose = null
+            if (closedApp != null) {
+                android.util.Log.d("ReelMeter", "[ReelMeter] ${closedApp.label} closed")
+                android.util.Log.d("ReelMeter", "[ReelMeter] Reel tracking paused")
+                android.util.Log.d("ReelMeter", "[ReelMeter] Session saved")
+                transitionDetector.resetApp(closedApp)
+            }
         }
     }
 
@@ -104,17 +113,10 @@ class ReelAccessibilityService : AccessibilityService() {
             } else if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
                 // Only act on definitive foreground-app transitions (not transient window changes).
                 // Schedule the dismiss with a short delay so that brief system overlays (e.g.
-                // share sheets, permission dialogs) that immediately return focus to Instagram
-                // don't cause the counter to flash off and back on.
+                // share sheets, permission dialogs) that immediately return focus to the app
+                // don't cause the counter to flash or reset the detector state.
+                pendingAppToClose = previousApp
                 activeTrackedApp = null
-                if (previousApp != null) {
-                    android.util.Log.d("ReelMeter", "[ReelMeter] ${previousApp.label} closed")
-                    android.util.Log.d("ReelMeter", "[ReelMeter] Reel tracking paused")
-                    android.util.Log.d("ReelMeter", "[ReelMeter] Session saved")
-                    transitionDetector.resetApp(previousApp)
-                }
-                // Debounce: wait 800 ms before dismissing; if a tracked-app event arrives
-                // in that window the runnable is cancelled and the counter stays visible.
                 mainHandler.removeCallbacks(dismissCounterRunnable)
                 mainHandler.postDelayed(dismissCounterRunnable, 800L)
             }
@@ -133,6 +135,7 @@ class ReelAccessibilityService : AccessibilityService() {
 
         // Cancel any pending dismiss — a scroll means the user is actively inside the app
         mainHandler.removeCallbacks(dismissCounterRunnable)
+        pendingAppToClose = null
         activeTrackedApp = app
 
         // Ensure floating counter is active when user is in a tracked app
@@ -145,10 +148,7 @@ class ReelAccessibilityService : AccessibilityService() {
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             val dx = event.scrollDeltaX
             val dy = event.scrollDeltaY
-            // For YouTube Shorts, ViewPager2 consumes vertical scroll and may report dy=0 with small touch drift dx.
-            // Do NOT discard YouTube Shorts scrolls unless dx is a massive horizontal swipe (e.g. > 180px)
-            if (app != TrackedApp.YOUTUBE && !SwipeFilter.isVerticalSwipe(dx, dy)) return
-            if (app == TrackedApp.YOUTUBE && abs(dx) > 180 && dy == 0) return
+            if (!SwipeFilter.isVerticalSwipe(dx, dy)) return
         }
 
         if (!transitionDetector.isNewReelTransition(app, event, time.nowMillis())) return

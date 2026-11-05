@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "109137139608",
+    "project_id": "reelmeter-8791b",
+    "storage_bucket": "reelmeter-8791b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:109137139608:android:31eda477c49dc4bb537ded",
+        "android_client_info": {
+          "package_name": "com.reelmeter"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDsaW9YkGFNZCdL1nUug8TCwGG40ho4n7U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

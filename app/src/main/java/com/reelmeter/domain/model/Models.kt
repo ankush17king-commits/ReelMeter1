@@ -10,7 +10,13 @@ enum class TrackedApp(val packageName: String, val label: String) {
     SNAPCHAT("com.snapchat.android", "Snapchat");
 
     companion object {
-        fun fromPackage(packageName: String): TrackedApp? = entries.firstOrNull { it.packageName == packageName }
+        fun fromPackage(packageName: String): TrackedApp? {
+            if (packageName.contains("youtube", ignoreCase = true)) return YOUTUBE
+            if (packageName.contains("instagram", ignoreCase = true)) return INSTAGRAM
+            if (packageName.contains("facebook", ignoreCase = true) || packageName == "com.facebook.katana") return FACEBOOK
+            if (packageName.contains("snapchat", ignoreCase = true)) return SNAPCHAT
+            return entries.firstOrNull { it.packageName == packageName }
+        }
     }
 }
 

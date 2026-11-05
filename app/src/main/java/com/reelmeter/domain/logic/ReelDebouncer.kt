@@ -29,6 +29,20 @@ class ReelDebouncer(
 
 /** Ignores horizontal-only scrolls (carousels, stories tray). Deltas are 0 when unavailable (API < 28). */
 object SwipeFilter {
-    fun isVerticalSwipe(deltaX: Int, deltaY: Int): Boolean =
-        (deltaX == 0 && deltaY == 0) || abs(deltaY) >= abs(deltaX) || abs(deltaX) < 20
+    /**
+     * Returns true if the scroll looks like a vertical swipe (reel navigation).
+     *
+     * Rules:
+     * - If both deltas are 0 (API < 28, values unavailable) → allow (can't determine direction).
+     * - If vertical delta is non-zero, verify vertical movement dominates horizontal.
+     * - If deltaY is 0 (common on apps like YouTube that don't report vertical delta),
+     *   only reject if deltaX is a significant horizontal swipe (>= 40px).
+     */
+    fun isVerticalSwipe(deltaX: Int, deltaY: Int): Boolean {
+        if (deltaX == 0 && deltaY == 0) return true
+        if (deltaY != 0) {
+            return abs(deltaY) >= abs(deltaX)
+        }
+        return abs(deltaX) <= 120
+    }
 }

@@ -26,19 +26,29 @@ class FocusTimerManager @Inject constructor(
     private val _timerState = MutableStateFlow<FocusTimerState>(FocusTimerState.Idle)
     val timerState: StateFlow<FocusTimerState> = _timerState.asStateFlow()
 
+    // Tick counter incremented every second so collectors always get a new emission
+    // even when the sealed-class state object hasn't structurally changed.
+    private val _tickMs = MutableStateFlow(timeProvider.nowMillis())
+    /** Always-ticking wall-clock millis. Collect this in the UI instead of System.currentTimeMillis(). */
+    val tickMs: StateFlow<Long> = _tickMs.asStateFlow()
+
     init {
-        // Ticking loop to evaluate state transitions automatically & update UI timer digits
+        // Ticking loop: evaluate state transitions AND force a tick every second so
+        // the UI can recompose the countdown digits without relying on structural equality.
         scope.launch {
             while (true) {
-                delay(1000)
-                val current = _timerState.value
+                delay(500) // 500 ms gives sub-second visual smoothness
                 val now = timeProvider.nowMillis()
-                val evaluated = FocusTimerLogic.evaluate(current, now)
-                _timerState.value = evaluated
-                if (evaluated is FocusTimerState.Running) {
-                    _timerState.value = evaluated.copy()
-                } else if (evaluated is FocusTimerState.Unlocking) {
-                    _timerState.value = evaluated.copy()
+                _tickMs.value = now
+
+                val current = _timerState.value
+                val next = FocusTimerLogic.evaluate(current, now)
+                // Always reassign even if structurally equal — StateFlow de-dupes by referential
+                // equality for data classes, so force a new object when the timer is active.
+                _timerState.value = when {
+                    next is FocusTimerState.Running   -> next.copy()
+                    next is FocusTimerState.Unlocking -> next.copy()
+                    else -> next
                 }
             }
         }

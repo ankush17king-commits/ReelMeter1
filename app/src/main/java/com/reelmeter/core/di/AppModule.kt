@@ -27,6 +27,7 @@ abstract class BindingsModule {
     @Binds abstract fun settingsRepository(impl: SettingsRepositoryImpl): SettingsRepository
     @Binds abstract fun timeProvider(impl: SystemTimeProvider): TimeProvider
     @Binds abstract fun leaderboardRepository(impl: com.reelmeter.data.repository.FakeLeaderboardRepository): com.reelmeter.domain.repository.LeaderboardRepository
+    @Binds abstract fun battleRepository(impl: com.reelmeter.data.repository.FirebaseBattleRepository): com.reelmeter.domain.repository.BattleRepository
 }
 
 @Module

@@ -30,21 +30,20 @@ class FloatingCounterController(private val context: Context) {
     private var lastTotal: Int = -1
 
     fun showOrUpdate(total: Int, limit: Int) {
+        // Must be called from the main thread.
         // Concurrency Guard: Never allow a stale lower count to overwrite a higher current count
         if (root != null && total < lastTotal && lastTotal > 0) {
             return
         }
         lastTotal = total
 
-        val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
-        mainHandler.post {
-            if (root != null) {
-                updateText(total, limit)
-                return@post
-            }
+        if (root != null) {
+            updateText(total, limit)
+            return
+        }
 
-            val density = context.resources.displayMetrics.density
-            fun dp(v: Int) = (v * density).toInt()
+        val density = context.resources.displayMetrics.density
+        fun dp(v: Int) = (v * density).toInt()
 
             val isOverLimit = total >= limit
 
@@ -94,17 +93,17 @@ class FloatingCounterController(private val context: Context) {
 
             updateText(total, limit)
 
-            val type = if (Settings.canDrawOverlays(context)) {
+            val primaryType = if (Settings.canDrawOverlays(context)) {
                 LP.TYPE_APPLICATION_OVERLAY
             } else {
                 LP.TYPE_ACCESSIBILITY_OVERLAY
             }
 
-            val params = LP(
+            fun createParams(windowType: Int) = LP(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
-                type,
-                LP.FLAG_NOT_FOCUSABLE or LP.FLAG_LAYOUT_IN_SCREEN or LP.FLAG_KEEP_SCREEN_ON,
+                windowType,
+                LP.FLAG_NOT_FOCUSABLE or LP.FLAG_NOT_TOUCH_MODAL or LP.FLAG_LAYOUT_IN_SCREEN or LP.FLAG_KEEP_SCREEN_ON,
                 PixelFormat.TRANSLUCENT
             ).apply {
                 gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
@@ -112,15 +111,22 @@ class FloatingCounterController(private val context: Context) {
             }
 
             try {
-                windowManager.addView(container, params)
+                windowManager.addView(container, createParams(primaryType))
                 root = container
             } catch (e: Exception) {
-                root = null
-                robotImageView = null
-                robotTextView = null
-                countTextView = null
+                // If primary window type failed (common on Xiaomi/Vivo/Samsung with accessibility overlay), fallback to alternate
+                val fallbackType = if (primaryType == LP.TYPE_APPLICATION_OVERLAY) LP.TYPE_ACCESSIBILITY_OVERLAY else LP.TYPE_APPLICATION_OVERLAY
+                try {
+                    windowManager.addView(container, createParams(fallbackType))
+                    root = container
+                } catch (fallbackError: Exception) {
+                    android.util.Log.e("ReelMeter", "Failed to add floating counter overlay on this device", fallbackError)
+                    root = null
+                    robotImageView = null
+                    robotTextView = null
+                    countTextView = null
+                }
             }
-        }
     }
 
     private fun updateText(total: Int, limit: Int) {
@@ -157,12 +163,10 @@ class FloatingCounterController(private val context: Context) {
         robotImageView = null
         robotTextView = null
         countTextView = null
+        lastTotal = -1
 
         if (viewToDismiss != null) {
-            val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
-            mainHandler.post {
-                runCatching { windowManager.removeView(viewToDismiss) }
-            }
+            runCatching { windowManager.removeView(viewToDismiss) }
         }
     }
 }

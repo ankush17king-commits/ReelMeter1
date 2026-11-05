@@ -73,6 +73,7 @@ import java.time.format.DateTimeFormatter
 fun DashboardScreen(viewModel: DashboardViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val focusState by viewModel.focusTimerManager.timerState.collectAsStateWithLifecycle()
+    val tickMs by viewModel.focusTimerManager.tickMs.collectAsStateWithLifecycle()
 
     // Re-check permissions every time the user comes back from system settings.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refreshPermissions() }
@@ -80,7 +81,7 @@ fun DashboardScreen(viewModel: DashboardViewModel = hiltViewModel()) {
     when (val s = state) {
         DashboardUiState.Loading -> LoadingState()
         is DashboardUiState.Error -> ErrorState(s.message, viewModel::retry)
-        is DashboardUiState.Success -> DashboardContent(s, focusState, viewModel)
+        is DashboardUiState.Success -> DashboardContent(s, focusState, tickMs, viewModel)
     }
 }
 
@@ -88,6 +89,7 @@ fun DashboardScreen(viewModel: DashboardViewModel = hiltViewModel()) {
 private fun DashboardContent(
     state: DashboardUiState.Success,
     focusState: com.reelmeter.domain.logic.FocusTimerState,
+    tickMs: Long,
     viewModel: DashboardViewModel
 ) {
     val data = state.data
@@ -185,6 +187,7 @@ private fun DashboardContent(
         // Focus Timer moved to the VERY BOTTOM of the home screen
         FocusTimerCard(
             focusState = focusState,
+            tickMs = tickMs,
             onStart = { mins -> viewModel.focusTimerManager.startTimer(context, mins) },
             onCancel = { viewModel.focusTimerManager.cancelTimer() },
             onStartUnlock = { viewModel.focusTimerManager.startUnlocking() }
@@ -351,6 +354,7 @@ private fun AppUsageCard(app: TrackedApp, count: Int, total: Int, tracked: Boole
 @Composable
 private fun FocusTimerCard(
     focusState: com.reelmeter.domain.logic.FocusTimerState,
+    tickMs: Long,
     onStart: (Int) -> Unit,
     onCancel: () -> Unit,
     onStartUnlock: () -> Unit,
@@ -393,7 +397,7 @@ private fun FocusTimerCard(
                     }
                     is com.reelmeter.domain.logic.FocusTimerState.Running -> {
                         var showFullScreenTimer by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-                        val remainingSecs = (focusState.remainingMs(System.currentTimeMillis()) / 1000).toInt()
+                        val remainingSecs = (focusState.remainingMs(tickMs) / 1000).toInt()
                         val mins = remainingSecs / 60
                         val secs = remainingSecs % 60
                         val formattedTime = String.format(java.util.Locale.US, "%02d:%02d", mins, secs)
@@ -516,7 +520,7 @@ private fun FocusTimerCard(
                         }
                     }
                     is com.reelmeter.domain.logic.FocusTimerState.Unlocking -> {
-                        val remainingSecs = focusState.remainingSeconds(System.currentTimeMillis())
+                        val remainingSecs = focusState.remainingSeconds(tickMs)
                         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("Breathe in… Breathe out…", style = MaterialTheme.typography.titleMedium, color = PremiumColors.GlowCyan)
                             Spacer(Modifier.height(8.dp))

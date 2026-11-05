@@ -15,8 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -63,14 +62,20 @@ private val SilverColor = Color(0xFFC0C0C0)
 private val BronzeColor = Color(0xFFCD7F32)
 
 @Composable
-fun LeaderboardScreen(viewModel: LeaderboardViewModel = hiltViewModel()) {
+fun LeaderboardScreen(
+    modifier: Modifier = Modifier,
+    showTitle: Boolean = false,
+    viewModel: LeaderboardViewModel = hiltViewModel()
+) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
     Column(
-        Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp),
+        modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("Leaderboard", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        if (showTitle) {
+            Text("Leaderboard", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        }
 
         when (val s = state) {
             is LeaderboardUiState.OptInRequired -> OptInConsentContent(onJoin = viewModel::join)
@@ -83,9 +88,9 @@ fun LeaderboardScreen(viewModel: LeaderboardViewModel = hiltViewModel()) {
 private fun OptInConsentContent(onJoin: (String) -> Unit) {
     var nick by remember { mutableStateOf("") }
 
-    Box(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxWidth()) {
         // Decorative sparkle dots in background
-        Canvas(Modifier.fillMaxSize()) {
+        Canvas(Modifier.matchParentSize()) {
             val sparklePositions = listOf(
                 Offset(size.width * 0.1f, size.height * 0.15f),
                 Offset(size.width * 0.85f, size.height * 0.1f),
@@ -110,7 +115,7 @@ private fun OptInConsentContent(onJoin: (String) -> Unit) {
         }
 
         Column(
-            Modifier.fillMaxSize(),
+            Modifier.fillMaxWidth().padding(vertical = 12.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -192,18 +197,16 @@ private fun ActiveLeaderboardContent(
         Spacer(Modifier.height(12.dp))
     }
 
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        itemsIndexed(state.users) { index, user ->
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        state.users.forEachIndexed { index, user ->
             UserRankRow(rank = index + 1, user = user)
         }
-        item {
-            Spacer(Modifier.height(16.dp))
-            OutlinedButton(
-                onClick = { viewModel.leave() },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Leave Leaderboard & Clear Data", color = MaterialTheme.colorScheme.error)
-            }
+        Spacer(Modifier.height(16.dp))
+        OutlinedButton(
+            onClick = { viewModel.leave() },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Leave Leaderboard & Clear Data", color = MaterialTheme.colorScheme.error)
         }
     }
 

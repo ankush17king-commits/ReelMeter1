@@ -92,9 +92,6 @@ fun ReelMeterTheme(themeMode: ThemeMode, content: @Composable () -> Unit) {
             val controller = WindowCompat.getInsetsController(window, view)
             controller.isAppearanceLightStatusBars = !dark
             controller.isAppearanceLightNavigationBars = !dark
-            // Edge-to-edge transparent system bars
-            window.statusBarColor = Color.Transparent.toArgb()
-            window.navigationBarColor = Color.Transparent.toArgb()
         }
     }
     MaterialTheme(

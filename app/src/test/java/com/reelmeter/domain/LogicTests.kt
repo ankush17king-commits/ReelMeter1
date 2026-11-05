@@ -91,6 +91,9 @@ class ReelDebouncerTest {
         assertTrue(SwipeFilter.isVerticalSwipe(0, 0))
         assertTrue(SwipeFilter.isVerticalSwipe(5, 300))
         assertFalse(SwipeFilter.isVerticalSwipe(300, 5))
+        // Tolerates vertical swipes with small thumb drift when deltaY is 0 (YouTube Shorts, Snapchat, Facebook)
+        assertTrue(SwipeFilter.isVerticalSwipe(40, 0))
+        assertFalse(SwipeFilter.isVerticalSwipe(300, 0))
     }
 }
 
@@ -191,5 +194,9 @@ class ReelTransitionDetectorTest {
         assertFalse(detector.isReelContainerEvent("android.widget.EditText"))
         assertFalse(detector.isReelContainerEvent("android.widget.Button"))
         assertTrue(detector.isReelContainerEvent("androidx.viewpager2.widget.ViewPager2"))
+        assertTrue(detector.isReelContainerEvent("androidx.recyclerview.widget.RecyclerView"))
+        assertTrue(detector.isReelContainerEvent("android.widget.FrameLayout"))
+        assertTrue(detector.isReelContainerEvent("com.google.android.apps.youtube.app.extensions.reel.watch.player.ReelPlayerView"))
+        assertTrue(detector.isReelContainerEvent("com.snap.opera.shared.view.OperaViewPager"))
     }
 }
