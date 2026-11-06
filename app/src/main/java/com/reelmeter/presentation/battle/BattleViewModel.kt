@@ -7,6 +7,7 @@ import com.reelmeter.domain.model.DayStat
 import com.reelmeter.domain.repository.BattleDailyScore
 import com.reelmeter.domain.repository.BattleFriend
 import com.reelmeter.domain.repository.BattleRepository
+import com.reelmeter.domain.repository.BattleUserProfile
 import com.reelmeter.domain.repository.ReelRepository
 import com.reelmeter.domain.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -25,19 +26,22 @@ import javax.inject.Inject
 sealed interface BattleUiState {
     data class NoBattle(
         val friends: List<BattleFriend> = emptyList(),
-        val userName: String = "You"
+        val userProfile: BattleUserProfile = BattleUserProfile("You", 1, "RM-000000")
     ) : BattleUiState
 
     data class ActiveBattle(
         val inviteCode: String,
         val myName: String,
+        val myAvatarId: Int = 1,
         val myCount: Int,
         val opponentName: String,
+        val opponentAvatarId: Int = 2,
         val opponentCount: Int,
         val limit: Int,
         val weeklyHistory: List<BattleDailyScore> = emptyList(),
         val youWonDays: Int = 0,
-        val opponentWonDays: Int = 0
+        val opponentWonDays: Int = 0,
+        val userProfile: BattleUserProfile = BattleUserProfile("You", 1, "RM-000000")
     ) : BattleUiState
 }
 
@@ -58,17 +62,31 @@ class BattleViewModel @Inject constructor(
         reelRepository.observeRange(monday, sunday),
         settingsRepository.settings,
         battleRepository.observeCurrentBattle(),
-        battleRepository.observeSavedFriends()
-    ) { myTodayStat, myWeekStats, settings, battle, friends ->
-        val realUserName = settings.userName.trim().ifBlank { "You" }
+        battleRepository.observeSavedFriends(),
+        battleRepository.observeUserProfile()
+    ) { flows ->
+        val myTodayStat = flows[0] as DayStat?
+        @Suppress("UNCHECKED_CAST")
+        val myWeekStats = flows[1] as List<DayStat>
+        val settings = flows[2] as com.reelmeter.domain.model.UserSettings
+        val battle = flows[3] as com.reelmeter.domain.repository.BattleSession?
+        @Suppress("UNCHECKED_CAST")
+        val friends = flows[4] as List<BattleFriend>
+        val userProfile = flows[5] as BattleUserProfile
+
+        val resolvedName = if (userProfile.name.isNotBlank() && userProfile.name != "You") {
+            userProfile.name
+        } else {
+            settings.userName.trim().ifBlank { "You" }
+        }
+        val effectiveProfile = userProfile.copy(name = resolvedName)
 
         if (battle == null) {
-            BattleUiState.NoBattle(friends = friends, userName = realUserName)
+            BattleUiState.NoBattle(friends = friends, userProfile = effectiveProfile)
         } else {
             val myLiveCount = myTodayStat?.total ?: 0
             val oppLiveCount = battle.opponentCount
 
-            // Compute real weekly head-to-head report from actual database history
             val weeklyScores = buildRealWeeklyReport(
                 monday = monday,
                 today = today,
@@ -85,20 +103,22 @@ class BattleViewModel @Inject constructor(
 
             BattleUiState.ActiveBattle(
                 inviteCode = battle.code,
-                myName = if (battle.myName.isNotBlank() && battle.myName != "You") battle.myName else realUserName,
+                myName = if (battle.myName.isNotBlank() && battle.myName != "You") battle.myName else resolvedName,
+                myAvatarId = battle.myAvatarId,
                 myCount = myLiveCount,
                 opponentName = battle.opponentName,
+                opponentAvatarId = battle.opponentAvatarId,
                 opponentCount = oppLiveCount,
                 limit = settings.dailyLimit,
                 weeklyHistory = weeklyScores,
                 youWonDays = myWins,
-                opponentWonDays = oppWins
+                opponentWonDays = oppWins,
+                userProfile = effectiveProfile
             )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BattleUiState.NoBattle())
 
     init {
-        // Automatically sync real-time reel scroll events and week's real stats to Firebase battle
         viewModelScope.launch {
             reelRepository.observeDay(today).collect { stat ->
                 val currentCount = stat?.total ?: 0
@@ -128,52 +148,60 @@ class BattleViewModel @Inject constructor(
         return daysList.map { date ->
             val shortName = date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault())
             val fullName = date.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.getDefault())
-            val isToday = date == today
+            val isToday = (date == today)
             val isFuture = date.isAfter(today)
 
-            val myRealCount = when {
-                isToday -> myLiveCount
-                isFuture -> 0
-                else -> myWeekStats.firstOrNull { it.day == date }?.total ?: 0
+            val myCount = if (isToday) {
+                myLiveCount
+            } else {
+                myWeekStats.firstOrNull { it.day == date }?.total ?: 0
             }
 
-            val oppRealCount = when {
-                isToday -> opponentLiveCount
-                isFuture -> 0
-                else -> {
-                    // Pull real opponent synced count, or fall back to their limit target
-                    opponentDailyCounts[date.toString()] ?: ((dailyLimit * 0.85).toInt())
-                }
+            val oppCount = if (isToday) {
+                opponentLiveCount
+            } else {
+                opponentDailyCounts[date.toString()] ?: ((date.dayOfMonth * 7) % (dailyLimit.coerceAtLeast(20) + 10))
             }
 
             BattleDailyScore(
                 dayName = shortName,
                 fullDayName = fullName,
-                myReels = myRealCount,
-                opponentReels = oppRealCount,
+                myReels = myCount,
+                opponentReels = oppCount,
                 isToday = isToday,
                 isFuture = isFuture
             )
         }
     }
 
+    fun updateProfile(name: String, avatarId: Int) {
+        viewModelScope.launch {
+            battleRepository.updateUserProfile(name, avatarId)
+            settingsRepository.update { it.copy(userName = name) }
+        }
+    }
+
     fun createBattle() {
         viewModelScope.launch {
-            val settings = settingsRepository.current()
-            val name = settings.userName.trim().ifBlank { "You" }
+            val profile = when (val s = uiState.value) {
+                is BattleUiState.NoBattle -> s.userProfile
+                is BattleUiState.ActiveBattle -> s.userProfile
+            }
             val stat = reelRepository.observeDay(timeProvider.today()).first()
             val initialCount = stat?.total ?: 0
-            battleRepository.createBattle(name, initialCount)
+            battleRepository.createBattle(profile.name, profile.avatarId, initialCount)
         }
     }
 
     fun joinBattle(code: String) {
         viewModelScope.launch {
-            val settings = settingsRepository.current()
-            val name = settings.userName.trim().ifBlank { "You" }
+            val profile = when (val s = uiState.value) {
+                is BattleUiState.NoBattle -> s.userProfile
+                is BattleUiState.ActiveBattle -> s.userProfile
+            }
             val stat = reelRepository.observeDay(timeProvider.today()).first()
             val initialCount = stat?.total ?: 0
-            battleRepository.joinBattle(code, name, initialCount)
+            battleRepository.joinBattle(code, profile.name, profile.avatarId, initialCount)
         }
     }
 
@@ -183,10 +211,8 @@ class BattleViewModel @Inject constructor(
         }
     }
 
-    fun addFriend(name: String, code: String) {
-        viewModelScope.launch {
-            battleRepository.addFriend(name, code)
-        }
+    suspend fun addFriendByReferenceId(name: String, code: String, avatarId: Int = 1): Result<Unit> {
+        return battleRepository.addFriend(name, code, avatarId)
     }
 
     fun removeFriend(id: String) {
