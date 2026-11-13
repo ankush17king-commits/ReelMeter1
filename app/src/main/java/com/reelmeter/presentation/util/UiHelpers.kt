@@ -33,8 +33,14 @@ object SystemIntents {
         runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
     }
 
-    fun openAccessibilitySettings(context: Context) =
-        start(context, Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+    fun openAccessibilitySettings(context: Context) {
+        runCatching {
+            val intent = Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS", Uri.parse("package:${context.packageName}"))
+            context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }.onFailure {
+            start(context, Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        }
+    }
 
     fun openOverlaySettings(context: Context) =
         start(context, Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}")))
